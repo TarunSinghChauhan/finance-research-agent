@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Financial Research Agent</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #e6edf3; min-height: 100vh; }
+
+.header { background: #161b22; border-bottom: 1px solid #21262d; padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; height: 54px; }
+.logo { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 500; }
+.logo-icon { width: 28px; height: 28px; background: linear-gradient(135deg, #238636, #1f6feb); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+.header-right { display: flex; align-items: center; gap: 16px; font-size: 12px; color: #7d8590; }
+.live-badge { background: rgba(63,185,80,0.15); color: #3fb950; border: 1px solid rgba(63,185,80,0.3); border-radius: 12px; padding: 2px 8px; font-size: 11px; }
+
+.container { max-width: 1200px; margin: 0 auto; padding: 1.5rem 2rem; }
+
+.search-section { background: #161b22; border: 1px solid #21262d; border-radius: 10px; padding: 1.5rem; margin-bottom: 1.5rem; }
+.search-title { font-size: 13px; font-weight: 500; color: #7d8590; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.search-form { display: grid; grid-template-columns: 2fr 1fr 3fr auto; gap: 10px; align-items: end; }
+.form-group { display: flex; flex-direction: column; gap: 4px; }
+.form-label { font-size: 11px; color: #7d8590; }
+.form-input { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 8px 12px; color: #e6edf3; font-size: 13px; outline: none; }
+.form-input:focus { border-color: #1f6feb; }
+.search-btn { background: #238636; border: none; border-radius: 6px; padding: 8px 20px; color: white; font-size: 13px; cursor: pointer; white-space: nowrap; height: 36px; }
+.search-btn:hover { background: #2ea043; }
+.search-btn:disabled { background: #21262d; color: #7d8590; cursor: not-allowed; }
+
+.quick-chips { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.chip { font-size: 11px; padding: 4px 10px; border-radius: 12px; background: #21262d; border: 1px solid #30363d; color: #7d8590; cursor: pointer; }
+.chip:hover { border-color: #1f6feb; color: #58a6ff; }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+
+.stat-card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 1rem 1.25rem; }
+.stat-label { font-size: 11px; color: #7d8590; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+.stat-value { font-size: 24px; font-weight: 500; }
+.stat-sub { font-size: 11px; color: #7d8590; margin-top: 2px; }
+.green { color: #3fb950; }
+.blue { color: #58a6ff; }
+.yellow { color: #d29922; }
+.red { color: #f85149; }
+.purple { color: #bc8cff; }
+
+.panel { background: #161b22; border: 1px solid #21262d; border-radius: 8px; overflow: hidden; margin-bottom: 1rem; }
+.panel-header { padding: 0.75rem 1.25rem; border-bottom: 1px solid #21262d; display: flex; align-items: center; justify-content: space-between; }
+.panel-title { font-size: 13px; font-weight: 500; }
+.panel-body { padding: 1.25rem; }
+
+.badge { font-size: 11px; padding: 2px 8px; border-radius: 12px; }
+.badge-green { background: rgba(63,185,80,0.15); color: #3fb950; }
+.badge-blue { background: rgba(88,166,255,0.15); color: #58a6ff; }
+.badge-yellow { background: rgba(210,153,34,0.15); color: #d29922; }
+.badge-red { background: rgba(248,81,73,0.15); color: #f85149; }
+
+.report-box { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 1.25rem; margin-top: 1rem; display: none; }
+.report-section { margin-bottom: 1.25rem; }
+.report-section-title { font-size: 12px; font-weight: 500; color: #7d8590; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.step-num { width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; }
+.s1 { background: rgba(88,166,255,0.2); color: #58a6ff; }
+.s2 { background: rgba(63,185,80,0.2); color: #3fb950; }
+.s3 { background: rgba(248,81,73,0.2); color: #f85149; }
+.s4 { background: rgba(188,140,255,0.2); color: #bc8cff; }
+.report-content { font-size: 13px; color: #c9d1d9; line-height: 1.7; }
+
+.audit-trail { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 1rem; margin-top: 1rem; display: none; }
+.audit-title { font-size: 12px; font-weight: 500; color: #7d8590; margin-bottom: 8px; }
+.tool-call { padding: 6px 0; border-bottom: 1px solid #161b22; font-family: 'SF Mono', monospace; font-size: 11px; }
+.tool-name { color: #58a6ff; }
+.tool-time { color: #3fb950; margin-left: 8px; }
+
+.progress-bar { height: 3px; background: #21262d; border-radius: 2px; overflow: hidden; margin-bottom: 1rem; display: none; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, #1f6feb, #238636); animation: progress 2s ease-in-out infinite; }
+@keyframes progress { 0% { width: 0%; } 50% { width: 70%; } 100% { width: 100%; } }
+
+.status-row { display: flex; gap: 16px; margin-top: 1rem; font-size: 12px; color: #7d8590; }
+.status-item span { color: #e6edf3; font-weight: 500; }
+
+.meta-row { display: flex; gap: 16px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #21262d; }
+.meta-item { font-size: 11px; color: #7d8590; }
+.meta-item span { color: #58a6ff; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">
+    <div class="logo-icon">📊</div>
+    Financial Research Agent
+  </div>
+  <div class="header-right">
+    <span class="live-badge">● LIVE</span>
+    <span id="last-updated">Ready</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Search -->
+  <div class="search-section">
+    <div class="search-title">Research a company</div>
+    <div class="search-form">
+      <div class="form-group">
+        <label class="form-label">Company name</label>
+        <input class="form-input" id="company-input" type="text" placeholder="e.g. Apple Inc" value="Apple Inc" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ticker symbol</label>
+        <input class="form-input" id="symbol-input" type="text" placeholder="e.g. AAPL" value="AAPL" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Research query</label>
+        <input class="form-input" id="query-input" type="text" placeholder="What do you want to know?" value="Comprehensive investment analysis including growth prospects and risks" />
+      </div>
+      <button class="search-btn" id="research-btn" onclick="startResearch()">Analyze ↗</button>
+    </div>
+    <div class="quick-chips">
+      <div class="chip" onclick="setCompany('Apple Inc','AAPL')">🍎 Apple</div>
+      <div class="chip" onclick="setCompany('Microsoft','MSFT')">🪟 Microsoft</div>
+      <div class="chip" onclick="setCompany('NVIDIA','NVDA')">🟢 NVIDIA</div>
+      <div class="chip" onclick="setCompany('Tesla','TSLA')">⚡ Tesla</div>
+      <div class="chip" onclick="setCompany('Amazon','AMZN')">📦 Amazon</div>
+      <div class="chip" onclick="setCompany('Alphabet Inc','GOOGL')">🔍 Google</div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="grid-3">
+    <div class="stat-card">
+      <div class="stat-label">Reports Generated</div>
+      <div class="stat-value blue" id="total-reports">0</div>
+      <div class="stat-sub">this session</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Cost</div>
+      <div class="stat-value green" id="total-cost">$0.000</div>
+      <div class="stat-sub">budget: $0.50/query</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Avg Latency</div>
+      <div class="stat-value purple" id="avg-latency">—</div>
+      <div class="stat-sub">ms per report</div>
+    </div>
+  </div>
+
+  <!-- Progress bar -->
+  <div class="progress-bar" id="progress-bar">
+    <div class="progress-fill"></div>
+  </div>
+
+  <!-- Research steps status -->
+  <div class="panel" id="steps-panel" style="display:none">
+    <div class="panel-header">
+      <span class="panel-title">Research pipeline</span>
+      <span class="badge badge-blue" id="pipeline-status">Running...</span>
+    </div>
+    <div class="panel-body">
+      <div style="display:flex;gap:0;margin-bottom:1rem">
+        <div style="flex:1;text-align:center;padding:8px;border-radius:6px;background:#0d1117;margin:0 4px" id="step1-card">
+          <div style="font-size:18px">📊</div>
+          <div style="font-size:11px;color:#7d8590;margin-top:4px">Market Context</div>
+          <div style="font-size:10px;color:#21262d;margin-top:2px" id="step1-status">waiting</div>
+        </div>
+        <div style="flex:1;text-align:center;padding:8px;border-radius:6px;background:#0d1117;margin:0 4px" id="step2-card">
+          <div style="font-size:18px">💰</div>
+          <div style="font-size:11px;color:#7d8590;margin-top:4px">Financials</div>
+          <div style="font-size:10px;color:#21262d;margin-top:2px" id="step2-status">waiting</div>
+        </div>
+        <div style="flex:1;text-align:center;padding:8px;border-radius:6px;background:#0d1117;margin:0 4px" id="step3-card">
+          <div style="font-size:18px">⚠️</div>
+          <div style="font-size:11px;color:#7d8590;margin-top:4px">Risk Assessment</div>
+          <div style="font-size:10px;color:#21262d;margin-top:2px" id="step3-status">waiting</div>
+        </div>
+        <div style="flex:1;text-align:center;padding:8px;border-radius:6px;background:#0d1117;margin:0 4px" id="step4-card">
+          <div style="font-size:18px">🎯</div>
+          <div style="font-size:11px;color:#7d8590;margin-top:4px">Synthesis</div>
+          <div style="font-size:10px;color:#21262d;margin-top:2px" id="step4-status">waiting</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Report output -->
+  <div class="report-box" id="report-box">
+    <div class="report-section">
+      <div class="report-section-title"><span class="step-num s1">1</span> Market Context</div>
+      <div class="report-content" id="r-market"></div>
+    </div>
+    <div class="report-section">
+      <div class="report-section-title"><span class="step-num s2">2</span> Financial Analysis</div>
+      <div class="report-content" id="r-financial"></div>
+    </div>
+    <div class="report-section">
+      <div class="report-section-title"><span class="step-num s3">3</span> Risk Assessment</div>
+      <div class="report-content" id="r-risk"></div>
+    </div>
+    <div class="report-section">
+      <div class="report-section-title"><span class="step-num s4">4</span> Investment Thesis</div>
+      <div class="report-content" id="r-synthesis"></div>
+    </div>
+    <div class="meta-row">
+      <div class="meta-item">Cost: <span id="r-cost">—</span></div>
+      <div class="meta-item">Tokens: <span id="r-tokens">—</span></div>
+      <div class="meta-item">Latency: <span id="r-latency">—</span>ms</div>
+      <div class="meta-item">Hash: <span id="r-hash">—</span></div>
+      <div class="meta-item">Budget: <span id="r-budget">—</span></div>
+    </div>
+  </div>
+
+  <!-- Audit trail -->
+  <div class="audit-trail" id="audit-box">
+    <div class="audit-title">🔍 Tool Call Audit Trail</div>
+    <div id="audit-calls"></div>
+  </div>
+
+</div>
+
+<script>
+let totalReports = 0;
+let totalCost = 0;
+let totalLatency = 0;
+let currentReportId = null;
+let pollInterval = null;
+
+function setCompany(company, symbol) {
+  document.getElementById('company-input').value = company;
+  document.getElementById('symbol-input').value = symbol;
+}
+
+function setStepStatus(step, status) {
+  const el = document.getElementById(`step${step}-status`);
+  const card = document.getElementById(`step${step}-card`);
+  if (status === 'done') {
+    el.textContent = '✓ done';
+    el.style.color = '#3fb950';
+    card.style.background = 'rgba(63,185,80,0.05)';
+  } else if (status === 'running') {
+    el.textContent = '⟳ running';
+    el.style.color = '#58a6ff';
+  } else {
+    el.textContent = 'waiting';
+    el.style.color = '#21262d';
+    card.style.background = '#0d1117';
+  }
+}
+
+async function startResearch() {
+  const company = document.getElementById('company-input').value.trim();
+  const symbol = document.getElementById('symbol-input').value.trim().toUpperCase();
+  const query = document.getElementById('query-input').value.trim();
+
+  if (!company || !symbol) return;
+
+  const btn = document.getElementById('research-btn');
+  btn.disabled = true;
+  btn.textContent = 'Researching...';
+
+  document.getElementById('progress-bar').style.display = 'block';
+  document.getElementById('steps-panel').style.display = 'block';
+  document.getElementById('report-box').style.display = 'none';
+  document.getElementById('audit-box').style.display = 'none';
+  document.getElementById('pipeline-status').textContent = 'Running...';
+  document.getElementById('pipeline-status').className = 'badge badge-blue';
+
+  for (let i = 1; i <= 4; i++) setStepStatus(i, 'waiting');
+  setStepStatus(1, 'running');
+
+  document.getElementById('last-updated').textContent = `Researching ${company}...`;
+
+  try {
+    const res = await fetch('/research/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company, symbol, query }),
+    });
+    const data = await res.json();
+    currentReportId = data.report_id;
+
+    let step = 1;
+    pollInterval = setInterval(async () => {
+      const statusRes = await fetch(`/research/status/${currentReportId}`);
+      const statusData = await statusRes.json();
+
+      if (step < 4) {
+        setStepStatus(step, 'done');
+        step++;
+        if (step <= 4) setStepStatus(step, 'running');
+      }
+
+      if (statusData.status === 'completed') {
+        clearInterval(pollInterval);
+        for (let i = 1; i <= 4; i++) setStepStatus(i, 'done');
+        document.getElementById('pipeline-status').textContent = 'Completed';
+        document.getElementById('pipeline-status').className = 'badge badge-green';
+        await showResults(currentReportId);
+        btn.disabled = false;
+        btn.textContent = 'Analyze ↗';
+        document.getElementById('progress-bar').style.display = 'none';
+      } else if (statusData.status.startsWith('failed')) {
+        clearInterval(pollInterval);
+        document.getElementById('pipeline-status').textContent = 'Failed';
+        document.getElementById('pipeline-status').className = 'badge badge-red';
+        btn.disabled = false;
+        btn.textContent = 'Analyze ↗';
+        document.getElementById('progress-bar').style.display = 'none';
+      }
+    }, 3000);
+
+  } catch(e) {
+    console.error(e);
+    btn.disabled = false;
+    btn.textContent = 'Analyze ↗';
+    document.getElementById('progress-bar').style.display = 'none';
+  }
+}
+
+async function showResults(reportId) {
+  const res = await fetch(`/research/results/${reportId}`);
+  const data = await res.json();
+
+  document.getElementById('r-market').textContent = data.market_context || '';
+  document.getElementById('r-financial').textContent = data.financial_analysis || '';
+  document.getElementById('r-risk').textContent = data.risk_assessment || '';
+  document.getElementById('r-synthesis').textContent = data.synthesis || '';
+  document.getElementById('r-cost').textContent = '$' + (data.total_cost_usd || 0).toFixed(4);
+  document.getElementById('r-tokens').textContent = data.total_tokens || 0;
+  document.getElementById('r-latency').textContent = data.latency_ms || 0;
+  document.getElementById('r-hash').textContent = data.reproducibility_hash || '—';
+  document.getElementById('r-budget').textContent = data.within_budget ? '✓ Within budget' : '✗ Over budget';
+  document.getElementById('r-budget').style.color = data.within_budget ? '#3fb950' : '#f85149';
+
+  document.getElementById('report-box').style.display = 'block';
+
+  // Show audit trail
+  const calls = data.tool_calls || [];
+  const auditHtml = calls.map(c =>
+    `<div class="tool-call"><span class="tool-name">${c.tool}</span><span class="tool-time">${c.timestamp.slice(11,19)}</span> — ${c.result_summary.slice(0,80)}...</div>`
+  ).join('');
+  document.getElementById('audit-calls').innerHTML = auditHtml || '<div style="color:#7d8590;font-size:12px">No tool calls recorded</div>';
+  document.getElementById('audit-box').style.display = 'block';
+
+  // Update stats
+  totalReports++;
+  totalCost += data.total_cost_usd || 0;
+  totalLatency = data.latency_ms || 0;
+  document.getElementById('total-reports').textContent = totalReports;
+  document.getElementById('total-cost').textContent = '$' + totalCost.toFixed(4);
+  document.getElementById('avg-latency').textContent = totalLatency + 'ms';
+  document.getElementById('last-updated').textContent = `Last: ${data.company} @ ${new Date().toTimeString().slice(0,8)}`;
+}
+</script>
+</body>
+</html>
