@@ -6,6 +6,13 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from src.core.logging import get_logger
 
+
+def calculate_price_change(price: float, previous_close: float) -> tuple[float, float]:
+    """Returns (change, change_pct). change_pct is 0 if previous_close is falsy."""
+    change = price - previous_close
+    change_pct = (change / previous_close * 100) if previous_close else 0
+    return round(change, 2), round(change_pct, 2)
+
 logger = get_logger(__name__)
 
 
@@ -51,10 +58,9 @@ class FinancialTools:
                     "fifty_two_week_high": meta.get("fiftyTwoWeekHigh", 0),
                     "fifty_two_week_low": meta.get("fiftyTwoWeekLow", 0),
                 }
-                change = result["price"] - result["previous_close"]
-                change_pct = (change / result["previous_close"] * 100) if result["previous_close"] else 0
-                result["change"] = round(change, 2)
-                result["change_pct"] = round(change_pct, 2)
+                result["change"], result["change_pct"] = calculate_price_change(
+                    result["price"], result["previous_close"]
+                )
 
                 self._log_tool_call("get_stock_quote", {"symbol": symbol}, result)
                 logger.info("tool_stock_quote", symbol=symbol, price=result["price"])
