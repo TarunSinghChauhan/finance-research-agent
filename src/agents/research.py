@@ -1,6 +1,6 @@
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -200,7 +200,7 @@ Be balanced and professional.""",
 
         # Build final report
         final_report = f"""# Financial Research Report: {company} ({symbol})
-*Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}*
+*Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}*
 
 ## Market Context
 {market_context}
@@ -244,6 +244,6 @@ Be balanced and professional.""",
             "total_tokens": self.total_tokens,
             "latency_ms": latency_ms,
             "reproducibility_hash": reproducibility_hash,
-            "completed_at": datetime.utcnow().isoformat(),
+            "completed_at": datetime.now(timezone.utc).isoformat(),
             "within_budget": self.total_cost <= settings.max_cost_per_query_usd,
         }
