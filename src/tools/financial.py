@@ -1,7 +1,7 @@
 import httpx
 import json
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from src.core.logging import get_logger
@@ -30,7 +30,7 @@ class FinancialTools:
             "tool": tool,
             "params": params,
             "result_summary": str(result)[:200],
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
     @retry(stop=stop_after_attempt(2), wait=wait_exponential(min=1, max=5))
@@ -141,7 +141,7 @@ class FinancialTools:
                 "price": quote.get("price", 0),
                 "change_pct": quote.get("change_pct", 0),
             }
-        result = {"indices": indices, "timestamp": datetime.utcnow().isoformat()}
+        result = {"indices": indices, "timestamp": datetime.now(timezone.utc).isoformat()}
         self._log_tool_call("get_market_overview", {}, result)
         return result
 
@@ -150,6 +150,6 @@ class FinancialTools:
         payload = json.dumps({
             "company": company,
             "tool_calls": [t["tool"] for t in tool_calls],
-            "date": datetime.utcnow().strftime("%Y-%m-%d"),
+            "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         }, sort_keys=True)
         return hashlib.sha256(payload.encode()).hexdigest()[:16]
