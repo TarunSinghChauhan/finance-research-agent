@@ -1,13 +1,19 @@
 from sqlmodel import SQLModel, Field, Column, JSON
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 import uuid
 
 from src.core.config import get_settings
 
 settings = get_settings()
+
+
+def _utcnow() -> datetime:
+    """Naive UTC now. Matches the old datetime.utcnow() value without the deprecation warning."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
 
 engine = create_async_engine(settings.database_url, echo=False, pool_size=10)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -33,7 +39,7 @@ class ResearchReport(SQLModel, table=True):
     status: str = "pending"
     total_cost_usd: float = 0.0
     total_tokens: int = 0
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
     completed_at: Optional[datetime] = None
 
     # Structured reasoning chain stored as JSON
