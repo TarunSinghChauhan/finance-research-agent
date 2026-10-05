@@ -28,13 +28,24 @@ class FinancialResearchAgent:
     """
 
     def __init__(self):
-        self.llm = AsyncOpenAI(
-            api_key=settings.openrouter_api_key,
-            base_url="https://openrouter.ai/api/v1",
-        )
+        self._llm = None
         self.tools = FinancialTools()
         self.total_cost = 0.0
         self.total_tokens = 0
+
+    @property
+    def llm(self) -> AsyncOpenAI:
+        """Lazily build the OpenRouter client so constructing the agent needs no API key."""
+        if self._llm is None:
+            self._llm = AsyncOpenAI(
+                api_key=settings.openrouter_api_key,
+                base_url="https://openrouter.ai/api/v1",
+            )
+        return self._llm
+
+    @llm.setter
+    def llm(self, value) -> None:
+        self._llm = value
 
     def _estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
         return (input_tokens * 0.15 + output_tokens * 0.60) / 1_000_000
