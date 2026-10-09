@@ -1,7 +1,7 @@
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.api.main import app
 from src.tools.financial import FinancialTools
@@ -18,7 +18,18 @@ async def client():
 # ─── Health ───────────────────────────────────────────────────────────────────
 @pytest.mark.asyncio
 async def test_health(client):
-    resp = await client.get("/health/")
+    # Patch the DB engine so the test checks the endpoint, not a live Postgres.
+    conn = MagicMock()
+    conn.execute = AsyncMock()
+    ctx = MagicMock()
+    ctx.__aenter__ = AsyncMock(return_value=conn)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+    fake_engine = MagicMock()
+    fake_engine.connect.return_value = ctx
+
+    with patch("src.api.routers.health.engine", fake_engine):
+        resp = await client.get("/health/")
+
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
 
