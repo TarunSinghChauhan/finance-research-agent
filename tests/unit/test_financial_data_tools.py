@@ -1,14 +1,23 @@
 from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 
 from src.tools.financial import FinancialTools
 
 
 class FakeResponse:
-    def __init__(self, data):
+    def __init__(self, data, status_code=200):
         self._data = data
+        self.status_code = status_code
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            request = httpx.Request("GET", "https://example.test")
+            raise httpx.HTTPStatusError(
+                "error", request=request, response=httpx.Response(self.status_code, request=request)
+            )
 
     def json(self):
         return self._data
