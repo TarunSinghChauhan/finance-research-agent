@@ -2,7 +2,6 @@ import json
 import time
 from datetime import datetime, timezone
 from openai import AsyncOpenAI
-from tenacity import retry, stop_after_attempt, wait_exponential
 
 from src.tools.financial import FinancialTools
 from src.core.config import get_settings
@@ -10,6 +9,24 @@ from src.core.logging import get_logger
 
 settings = get_settings()
 logger = get_logger(__name__)
+
+UNAVAILABLE_PREFIX = "Analysis unavailable"
+BUDGET_EXCEEDED_MSG = "Cost budget exceeded — analysis truncated."
+NOT_AVAILABLE = "(not available: the step that should have produced this failed)"
+
+
+def is_unavailable(text: str) -> bool:
+    """True when a step's text is a failure notice rather than real analysis."""
+    return text.startswith(UNAVAILABLE_PREFIX) or text == BUDGET_EXCEEDED_MSG
+
+
+def _usable(text: str) -> str:
+    """What to show a later prompt for an earlier step: its text, or a neutral placeholder.
+
+    Failure notices must never be fed to the model as if they were analysis, or the
+    thesis gets written from error text.
+    """
+    return NOT_AVAILABLE if is_unavailable(text) else text
 
 
 class FinancialResearchAgent:
@@ -50,11 +67,13 @@ class FinancialResearchAgent:
     def _estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
         return (input_tokens * 0.15 + output_tokens * 0.60) / 1_000_000
 
-    @retry(stop=stop_after_attempt(2), wait=wait_exponential(min=1, max=5))
     async def _llm_call(self, system: str, user: str, max_tokens: int = 500) -> str:
+        # No @retry here: this method swallows every error, so a decorator would never
+        # fire, and the OpenAI client already retries 429/5xx/connection errors itself
+        # (max_retries=2 by default).
         if self.total_cost >= settings.max_cost_per_query_usd:
             logger.warning("cost_budget_exceeded", cost=self.total_cost)
-            return "Cost budget exceeded — analysis truncated."
+            return BUDGET_EXCEEDED_MSG
 
         try:
             response = await self.llm.chat.completions.create(
@@ -77,8 +96,9 @@ class FinancialResearchAgent:
                 self.total_tokens += response.usage.total_tokens
             return text
         except Exception as e:
+            # The detail is logged; the report text is user-facing, so it stays generic.
             logger.error("llm_call_failed", error=str(e))
-            return f"Analysis unavailable: {str(e)}"
+            return f"{UNAVAILABLE_PREFIX}: the model call failed."
 
     async def step1_market_context(self, company: str, symbol: str) -> str:
         """Step 1: Gather and analyze macro market context."""
@@ -135,7 +155,7 @@ Keep it factual and data-driven. 4-5 sentences.""",
         """Step 3: Identify and assess key risks."""
         logger.info("step3_risk_assessment", company=company)
 
-        news = await self.tools.get_news(f"{company} stock risks 2025")
+        news = await self.tools.get_news(f"{company} stock risks {datetime.now(timezone.utc).year}")
 
         return await self._llm_call(
             system="You are a risk analyst. Be objective and highlight genuine concerns.",
@@ -206,13 +226,37 @@ Be balanced and professional.""",
         # Execute 4-step reasoning chain
         market_context = await self.step1_market_context(company, symbol)
         financial_analysis = await self.step2_financial_analysis(company, symbol)
-        risk_assessment = await self.step3_risk_assessment(company, symbol, financial_analysis)
-        synthesis = await self.step4_synthesis(company, symbol, market_context, financial_analysis, risk_assessment)
+        # A failed step must not hand its error text to the next prompt as if it were
+        # analysis: later steps see a neutral placeholder, and the report says what is missing.
+        risk_assessment = await self.step3_risk_assessment(company, symbol, _usable(financial_analysis))
+        failed_steps = [
+            name
+            for name, text in (
+                ("market_context", market_context),
+                ("financial_analysis", financial_analysis),
+                ("risk_assessment", risk_assessment),
+            )
+            if is_unavailable(text)
+        ]
+        if len(failed_steps) == 3:
+            synthesis = f"{UNAVAILABLE_PREFIX}: no earlier step produced analysis to synthesize."
+        else:
+            synthesis = await self.step4_synthesis(
+                company, symbol,
+                _usable(market_context), _usable(financial_analysis), _usable(risk_assessment),
+            )
+        if is_unavailable(synthesis):
+            failed_steps.append("synthesis")
+        notice = (
+            "\n> ⚠ **Incomplete report:** these sections could not be generated: "
+            + ", ".join(failed_steps) + ".\n"
+            if failed_steps else ""
+        )
 
         # Build final report
         final_report = f"""# Financial Research Report: {company} ({symbol})
 *Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}*
-
+{notice}
 ## Market Context
 {market_context}
 
@@ -249,6 +293,8 @@ Be balanced and professional.""",
             "financial_analysis": financial_analysis,
             "risk_assessment": risk_assessment,
             "synthesis": synthesis,
+            "failed_steps": failed_steps,
+            "complete": not failed_steps,
             "final_report": final_report,
             "tool_calls": self.tools.tool_calls,
             "total_cost_usd": round(self.total_cost, 6),
