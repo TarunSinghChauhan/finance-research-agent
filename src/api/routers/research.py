@@ -3,7 +3,7 @@ import hashlib
 import math
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
 import redis.asyncio as aioredis
 
@@ -18,6 +18,29 @@ settings = get_settings()
 _reports: dict[str, dict] = {}
 _report_status: dict[str, str] = {}
 
+# Reports live in memory, and every analysis adds one (a full report each). Without a cap the
+# process grows with every request until it is restarted.
+MAX_STORED_REPORTS = 200
+
+
+def _is_finished(status: str) -> bool:
+    return status == "completed" or status.startswith("failed")
+
+
+def _evict_finished_reports() -> None:
+    """Drop the oldest finished reports once more than MAX_STORED_REPORTS are held.
+
+    Pending and running reports are never evicted, so a client polling an active job
+    cannot have it disappear underneath it. Dicts keep insertion order, so the first
+    entries are the oldest.
+    """
+    for report_id in list(_report_status):
+        if len(_report_status) <= MAX_STORED_REPORTS:
+            break
+        if _is_finished(_report_status[report_id]):
+            _report_status.pop(report_id, None)
+            _reports.pop(report_id, None)
+
 
 def clean_nans(obj):
     if isinstance(obj, float):
@@ -30,9 +53,15 @@ def clean_nans(obj):
 
 
 class ResearchRequest(BaseModel):
-    company: str
-    symbol: str
-    query: str = "Provide a comprehensive investment analysis"
+    # The symbol is placed straight into Yahoo Finance URLs and into the LLM prompt, so it
+    # must look like a ticker: letters, digits and . ^ = - only (BRK-B, ^GSPC, RELIANCE.NS,
+    # EURUSD=X). Anything with / ? # % or spaces used to be accepted and could change which
+    # endpoint was called. Lengths are bounded so one request cannot inflate the prompt cost.
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    company: str = Field(min_length=1, max_length=100)
+    symbol: str = Field(min_length=1, max_length=15, pattern=r"^[A-Za-z0-9.^=\-]+$")
+    query: str = Field(default="Provide a comprehensive investment analysis", min_length=1, max_length=1000)
 
 
 SAMPLE_COMPANIES = [
@@ -68,6 +97,7 @@ async def analyze_company(request: ResearchRequest, background_tasks: Background
     import uuid
     report_id = str(uuid.uuid4())[:8]
     _report_status[report_id] = "pending"
+    _evict_finished_reports()
     background_tasks.add_task(_run_research, report_id, request)
     return {
         "report_id": report_id,
@@ -89,8 +119,12 @@ async def get_status(report_id: str):
 async def get_results(report_id: str):
     if report_id not in _report_status:
         raise HTTPException(status_code=404, detail="Report not found")
-    if _report_status[report_id] != "completed":
-        raise HTTPException(status_code=202, detail=f"Status: {_report_status[report_id]}")
+    status = _report_status[report_id]
+    if status.startswith("failed"):
+        # Not 202: that tells a client to keep polling, and a failed report never completes.
+        raise HTTPException(status_code=500, detail=f"Report generation {status}")
+    if status != "completed":
+        raise HTTPException(status_code=202, detail=f"Status: {status}")
     return JSONResponse(content=_reports[report_id])
 
 
@@ -134,6 +168,7 @@ async def analyze_sample(background_tasks: BackgroundTasks):
         query="Comprehensive investment analysis including growth prospects and risks",
     )
     _report_status[report_id] = "pending"
+    _evict_finished_reports()
     background_tasks.add_task(_run_research, report_id, request)
     return {
         "report_id": report_id,
