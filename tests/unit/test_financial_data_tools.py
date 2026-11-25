@@ -121,8 +121,8 @@ async def test_get_company_info_defaults_when_fields_missing():
     with patcher:
         result = await tools.get_company_info("AAPL")
     assert result["sector"] == "N/A"
-    assert result["employees"] == 0
-    assert result["pe_ratio"] == 0
+    assert result["employees"] is None
+    assert result["pe_ratio"] is None
 
 
 @pytest.mark.asyncio

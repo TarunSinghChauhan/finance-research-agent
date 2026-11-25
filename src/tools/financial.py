@@ -76,19 +76,28 @@ class FinancialTools:
             if meta.get("regularMarketPrice") is None:
                 # Do not report a missing price as a real quote of 0.
                 return {"error": f"No price available for {symbol}", "symbol": symbol}
+            previous_close = meta.get("previousClose")
+            if previous_close is None:
+                previous_close = meta.get("chartPreviousClose")
             result = {
                 "symbol": symbol,
-                "price": meta.get("regularMarketPrice", 0),
-                "previous_close": meta.get("previousClose", 0),
+                "price": meta.get("regularMarketPrice"),
+                "previous_close": previous_close,
                 "currency": meta.get("currency", "USD"),
                 "exchange": meta.get("exchangeName", ""),
                 "market_state": meta.get("marketState", ""),
-                "fifty_two_week_high": meta.get("fiftyTwoWeekHigh", 0),
-                "fifty_two_week_low": meta.get("fiftyTwoWeekLow", 0),
+                # Missing is None, not 0: a 52-week low of 0 reads as a real (and absurd) value.
+                "fifty_two_week_high": meta.get("fiftyTwoWeekHigh"),
+                "fifty_two_week_low": meta.get("fiftyTwoWeekLow"),
             }
-            result["change"], result["change_pct"] = calculate_price_change(
-                result["price"], result["previous_close"]
-            )
+            if previous_close:
+                result["change"], result["change_pct"] = calculate_price_change(
+                    result["price"], previous_close
+                )
+            else:
+                # With no previous close, price - 0 used to be reported as the day's change
+                # (a stock at 190 "up 190"). Say it is unknown instead.
+                result["change"], result["change_pct"] = None, None
 
             self._log_tool_call("get_stock_quote", {"symbol": symbol}, result)
             logger.info("tool_stock_quote", symbol=symbol, price=result["price"])
@@ -105,24 +114,40 @@ class FinancialTools:
             headers = {"User-Agent": "Mozilla/5.0"}
             data = await _fetch_json(url, params=params, headers=headers)
 
-            summary = data.get("quoteSummary", {}).get("result", [{}])[0]
-            profile = summary.get("summaryProfile", {})
-            financial = summary.get("financialData", {})
-            stats = summary.get("defaultKeyStatistics", {})
+            quote_summary = data.get("quoteSummary") or {}
+            results = quote_summary.get("result") or []
+            if not results:
+                # Yahoo answers an unknown symbol with "result": null plus an error object;
+                # indexing that raised a TypeError that surfaced as a confusing message.
+                detail = (quote_summary.get("error") or {}).get("description")
+                message = f"No company data found for {symbol}"
+                return {"error": f"{message}: {detail}" if detail else message, "symbol": symbol}
+            summary = results[0] or {}
+            profile = summary.get("summaryProfile") or {}
+            financial = summary.get("financialData") or {}
+            stats = summary.get("defaultKeyStatistics") or {}
 
+            def raw(section: dict, key: str):
+                """Yahoo wraps numbers as {"raw": ..., "fmt": ...}; absent or empty means unknown."""
+                value = section.get(key)
+                return value.get("raw") if isinstance(value, dict) else None
+
+            # Unknown fundamentals are None (null in the prompt). They used to default to 0,
+            # which told the analyst a company had zero revenue growth, zero margins, a P/E of
+            # 0 and a market cap of 0 when the data simply was not there.
             result = {
                 "symbol": symbol,
                 "sector": profile.get("sector", "N/A"),
                 "industry": profile.get("industry", "N/A"),
-                "employees": profile.get("fullTimeEmployees", 0),
-                "description": profile.get("longBusinessSummary", "")[:500],
-                "revenue_growth": financial.get("revenueGrowth", {}).get("raw", 0),
-                "profit_margins": financial.get("profitMargins", {}).get("raw", 0),
-                "return_on_equity": financial.get("returnOnEquity", {}).get("raw", 0),
-                "total_revenue": financial.get("totalRevenue", {}).get("raw", 0),
-                "pe_ratio": stats.get("forwardPE", {}).get("raw", 0),
-                "market_cap": stats.get("marketCap", {}).get("raw", 0),
-                "beta": stats.get("beta", {}).get("raw", 0),
+                "employees": profile.get("fullTimeEmployees"),
+                "description": (profile.get("longBusinessSummary") or "")[:500],
+                "revenue_growth": raw(financial, "revenueGrowth"),
+                "profit_margins": raw(financial, "profitMargins"),
+                "return_on_equity": raw(financial, "returnOnEquity"),
+                "total_revenue": raw(financial, "totalRevenue"),
+                "pe_ratio": raw(stats, "forwardPE"),
+                "market_cap": raw(stats, "marketCap"),
+                "beta": raw(stats, "beta"),
             }
             self._log_tool_call("get_company_info", {"symbol": symbol}, result)
             logger.info("tool_company_info", symbol=symbol, sector=result["sector"])
